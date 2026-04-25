@@ -97,11 +97,11 @@ OpenCV Haar Cascade로 웹캠 영상에서 얼굴을 실시간 감지하고,
 - 바운딩 박스: 정면(초록), 옆면(노랑)
 
 
-![정면 감지](assets/led_green.jpg)
+![정면 감지](assets/led_green.JPG)
 
-![측면 감지](assets/led_yellow.jpg)
+![측면 감지](assets/led_yellow.JPG)
 
-![미감지](assets/led_red.jpg)
+![미감지](assets/led_red.JPG)
 
 ---
 
