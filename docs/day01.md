@@ -98,7 +98,9 @@ OpenCV Haar Cascade로 웹캠 영상에서 얼굴을 실시간 감지하고,
 
 
 ![정면 감지](assets/led_green.jpg)
+
 ![측면 감지](assets/led_yellow.jpg)
+
 ![미감지](assets/led_red.jpg)
 
 ---
