@@ -45,7 +45,7 @@ POSE_MODEL_PATH = "yolov8n-pose.pt"
 BAUD_RATE = 9600
 
 # 감지 신뢰도 임계값 (낮추면 더 잘 잡지만 오탐 증가)
-CONF_THRESHOLD = 0.5
+CONF_THRESHOLD = 0.25
 
 # ROI 마스킹 비율 (모빌 장식 간섭 방지 - 가장자리 제외)
 ROI_MARGIN_X = 0.10   # 좌우 10% 제외
@@ -239,7 +239,7 @@ def main():
     print("[Model] 모델 로드 완료\n")
 
     # ── 웹캠 연결 ──────────────────────────────
-    cap = cv2.VideoCapture(CAM_INDEX)
+    cap = cv2.VideoCapture("ai/sample.mp4")
     if not cap.isOpened():
         print(f"[Error] 웹캠 인덱스 {CAM_INDEX} 를 열 수 없습니다.")
         sys.exit(1)
