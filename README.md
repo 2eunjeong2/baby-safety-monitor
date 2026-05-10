@@ -1,48 +1,122 @@
 # 영유아 수면 안전 모니터링 시스템
 
-## 1. 프로젝트 개요
-신생아 및 영유아는 분리 수면 중 스스로 자세를 바꾸거나 위험 상황을 인지·대처하는 능력이 없습니다. 통계에 따르면 영아 돌연사 증후군(SIDS)의 주요 원인 중 하나는 수면 중 기도 막힘으로, 이불이나 인형 등이 얼굴을 덮거나 아기가 뒤집혀 엎드린 자세를 유지할 때 질식 위험이 크게 높아집니다. 
- 
-부모가 항상 옆에서 지켜볼 수 없는 분리 수면 환경에서, 실시간으로 이상 상황을 감지하고 즉시 알람을 발송하는 시스템을 만들어보고자 하여 이 프로젝트를 시작합니다.
+YOLOv8n 기반 실시간 아기 자세 감지 — 정면 / 측면 / 후면 3클래스 분류 및 위험 알림
 
-### 1.1 목표
-- 웹캠과 YOLOv8 AI 모델을 활용하여 신생아의 얼굴 가림 및 뒤집힘 상태를 실시간 감지 
-- 위험 상황 감지 시 스마트폰 앱으로 즉시 푸시 알림 발송 
-- 부모가 원격으로 실시간 영상을 확인할 수 있는 웹 스트리밍 구현 
-- ROS를 통한 감지 데이터 통합 관리 
+---
 
-### 1.2 기대 효과 
-- 분리 수면 중 영아 질식사고 예방 
-- 부모의 육아 불안감 경감 및 수면의 질 향상
+## 데모
 
-</br>
+| 정면 — 안전 🟢 | 측면 — 주의 🟡 | 후면 — 위험 🔴 |
+|:---:|:---:|:---:|
+| ![정면](docs/assets/detection_front.jpg) | ![측면](docs/assets/detection_side.jpg) | ![후면](docs/assets/detection_back.jpg) |
 
+> 오버헤드(위에서 내려보는) 카메라 기준 실시간 감지 결과
 
-## 2. 시스템 구성 
+---
 
-### 2.1 하드웨어 구성 
+## 프로젝트 개요
 
-구분 | 장비  | 역할 
----- | --- | ---
-영상 입력  | USB 웹캠 (PC / 라즈베리파이)  | 실시간 영상 스트리밍 및 AI 추론 입력 
-엣지 디바이스  | 라즈베리파이 4  | 현장 영상 수신 및 전처리, 아두이노 시리얼 통신
-마이크로컨트롤러  | 아두이노 우노  | 온습도·거리 센서 제어 및 시리얼 데이터 송신 
-거리 센서  | HC-SR04 초음파 센서  | 이불·인형 등 물체 접근 거리 감지 
-알림 출력  | LED / 부저 (아두이노)  | 로컬 경보 출력 
-알림 수신  | 스마트폰 (Telegram / ntfy)  | 원격 푸시 알람 수신 
+신생아 및 영유아는 분리 수면 중 스스로 자세를 바꾸거나 위험 상황을 인지·대처하는 능력이 없습니다.  
+영아 돌연사 증후군(SIDS)의 주요 원인 중 하나는 수면 중 기도 막힘으로, 아기가 엎드린 자세(후면)를 유지할 때 질식 위험이 크게 높아집니다.
 
-</br>
-</br>
+부모가 항상 옆에서 지켜볼 수 없는 분리 수면 환경에서 **실시간으로 자세를 감지하고 위험 상태를 즉시 알리는 시스템**을 구현했습니다.
 
-### 2.2 소프트웨어 스택 
+---
 
-계층  | 기술  | 상세 
----- | --- | ---
-통신  | Python pyserial  | 아두이노 → 라즈베리파이 시리얼 수신 
-영상처리  | OpenCV (Python)  | 얼굴 감지, 가림 판별, FPS 측정 
-AI 추론  | YOLOv8 (Ultralytics)  | 자세 추정(pose), 객체 감지(detect) 
-미들웨어  | ROS (Noetic / 2)  | 감지 결과 토픽 퍼블리시 / 서브스크라이브 
-스트리밍  | Flask / mjpeg-streamer  | 실시간 웹 영상 제공 
-알람  | Telegram Bot API  | 푸시 알림 발송 
-버전 관리  | GitHub  | 소스코드 관리
+## 주요 기능
 
+- **3클래스 자세 감지**: 정면(안전) / 측면(주의) / 후면(위험)
+- **위험 지속 알림**: 후면 자세 5초 이상 지속 시 경보
+- **시간적 평활화**: 최근 20프레임 다수결로 오탐 방지
+- **LED 상태 표시**: 아두이노 연동 — 초록 / 노랑 / 빨강
+- **영상 루프 지원**: 파일 재생 시 타이머 자동 초기화
+- **FPS 표시 및 실시간 오버레이**
+
+---
+
+## 모델 성능
+
+### 학습 결과 (Training Curves)
+![results](docs/assets/results.png)
+
+### Precision-Recall Curve
+![PR Curve](docs/assets/BoxPR_curve.png)
+
+### Confusion Matrix (Normalized)
+![Confusion Matrix](docs/assets/confusion_matrix_normalized.png)
+
+---
+
+## 하드웨어 구성
+
+| 구분 | 장비 | 역할 |
+|---|---|---|
+| 영상 입력 | USB 웹캠 | 실시간 영상 스트리밍 |
+| 엣지 디바이스 | 라즈베리파이 4 | 현장 영상 수신 및 추론 |
+| 마이크로컨트롤러 | 아두이노 우노 | LED 상태 출력 |
+| 알림 출력 | LED (초록/노랑/빨강) | 로컬 경보 출력 |
+
+### LED 상태 표시
+
+| 안전 🟢 | 주의 🟡 | 위험 🔴 |
+|:---:|:---:|:---:|
+| ![green](docs/assets/led_green.JPG) | ![yellow](docs/assets/led_yellow.JPG) | ![red](docs/assets/led_red.JPG) |
+
+![arduino](docs/assets/arduino_led.GIF)
+
+---
+
+## 시스템 구조
+
+```
+mini_project_01/
+├── vision/
+│   └── baby_monitor_v4.py     # 실시간 감지 메인 스크립트
+├── ai/
+│   ├── train_v4.py            # YOLOv8n 학습 스크립트
+│   ├── download_dataset.py    # Roboflow 데이터셋 다운로드·병합
+│   └── dataset_v4/            # 학습 데이터 (gitignore)
+├── hw/
+│   └── led_control/
+│       └── led_control.ino    # 아두이노 LED 제어
+├── colab_train.ipynb          # Google Colab GPU 학습 노트북
+└── requirements.txt
+```
+
+---
+
+## 설치 및 실행
+
+### 1. 환경 설정
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 2. 웹캠 실시간 감지
+```bash
+python3 vision/baby_monitor_v4.py --source 0
+```
+
+### 3. 영상 파일 테스트
+```bash
+python3 vision/baby_monitor_v4.py --source ai/sample3.mp4
+```
+
+### 4. 모델 재학습 (Google Colab 권장)
+- `colab_train.ipynb` 를 Colab에서 열고 T4 GPU로 실행
+- 학습 완료 후 `best_new.pt` 를 `ai/runs/baby_monitor_v4/weights/best.pt` 로 교체
+
+---
+
+## 기술 스택
+
+| 영역 | 기술 |
+|---|---|
+| AI 추론 | YOLOv8n (Ultralytics) |
+| 영상 처리 | OpenCV, PIL |
+| 학습 환경 | Google Colab T4 GPU |
+| 데이터셋 | Roboflow (SabiCare — 3,384장) |
+| 하드웨어 | Arduino Uno, Raspberry Pi 4 |
+| 언어 | Python 3.11 |
