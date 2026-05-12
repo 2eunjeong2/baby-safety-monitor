@@ -102,8 +102,8 @@ def main():
 
     print("[로드] 모델 초기화...")
     model = YOLO(str(MODEL_PATH))
-    font    = load_font(28)
-    font_sm = load_font(18)
+    font    = load_font(42)
+    font_sm = load_font(27)
     print("[로드] 완료\n")
 
     cap = cv2.VideoCapture(source)
@@ -113,18 +113,24 @@ def main():
 
     back_start    = None   # 후면 감지 전용 타이머 (미감지와 분리)
     no_det_start  = None   # 미감지 전용 타이머
+    was_back      = False  # 마지막 감지가 후면이었는지 (경고 알림용)
+    state_start   = None   # 현재 상태 누적 시간 타이머
+    prev_smooth   = -1     # 상태 변화 감지용
     frame_n       = 0
     prev_tick     = cv2.getTickCount()
     cached_det    = None   # (cls_id, conf, box) or None
-    cached_status = (COLOR_GRAY, "초기화 중...")
+    cached_status = (COLOR_GRAY, "초기화 중...", "")
     cls_history   = deque(maxlen=SMOOTH_WIN)  # 시간적 평활화용
 
     def reset_state():
-        nonlocal back_start, no_det_start, cached_det, cached_status
+        nonlocal back_start, no_det_start, was_back, state_start, prev_smooth, cached_det, cached_status
         back_start   = None
         no_det_start = None
+        was_back     = False
+        state_start  = None
+        prev_smooth  = -1
         cached_det   = None
-        cached_status = (COLOR_GRAY, "초기화 중...")
+        cached_status = (COLOR_GRAY, "초기화 중...", "")
         cls_history.clear()
 
     while True:
@@ -151,6 +157,11 @@ def main():
             smooth = smooth_class(cls_history)
 
             now = time.time()
+            if smooth != prev_smooth:
+                state_start = now
+                prev_smooth = smooth
+            state_dur = now - state_start
+
             if smooth is None:
                 # 미감지 타이머: 후면 타이머(back_start)와 완전히 분리
                 if no_det_start is None:
@@ -158,27 +169,29 @@ def main():
                 elapsed = now - no_det_start
                 back_start = None   # 후면 타이머는 감지가 없으면 리셋
                 if elapsed >= BACK_ALERT:
-                    cached_status = (COLOR_RED, f"미감지 {elapsed:.1f}초 — 확인 필요!")
+                    cached_status = (COLOR_RED, "DANGER !", f"No Det  {elapsed:.1f}s")
                 else:
-                    cached_status = (COLOR_GRAY, f"확인 중... ({elapsed:.1f}s)")
+                    cached_status = (COLOR_GRAY, "감지 중...", f"{elapsed:.1f}s")
             else:
                 no_det_start = None   # 감지되면 미감지 타이머 리셋
                 if smooth == 2:   # 후면
+                    was_back = True
                     if back_start is None:
                         back_start = now
                     elapsed = now - back_start
                     if elapsed >= BACK_ALERT:
-                        cached_status = (COLOR_RED, f"후면 {elapsed:.1f}초 — 위험!")
+                        cached_status = (COLOR_RED, "DANGER !", f"Back  {elapsed:.1f}s")
                     else:
-                        cached_status = (COLOR_RED, f"후면 감지 ({elapsed:.1f}s / {BACK_ALERT}s)")
+                        cached_status = (COLOR_RED, "DANGER", f"{elapsed:.1f}s / {BACK_ALERT:.0f}s")
                 else:
+                    was_back = False
                     back_start = None
                     if smooth == 1:
-                        cached_status = (COLOR_YELLOW, "측면 — 주의")
+                        cached_status = (COLOR_YELLOW, "CAUTION", f"{state_dur:.1f}s")
                     else:
-                        cached_status = (COLOR_GREEN, "정면 — 안전")
+                        cached_status = (COLOR_GREEN, "SAFE", f"{state_dur:.1f}s")
 
-        sc, msg = cached_status
+        sc, status_label, status_time = cached_status
 
         # ── 바운딩박스 ────────────────────────────────
         if cached_det is not None:
@@ -186,16 +199,25 @@ def main():
             x1, y1, x2, y2 = map(int, box)
             c = CLASS_COLOR.get(cls_id, COLOR_GRAY)
             cv2.rectangle(frame, (x1, y1), (x2, y2), c, 2)
-            label = f"{CLASSES[cls_id]} {conf:.0%}"
-            frame = put_text(frame, label, (x1, max(0, y1 - 32)), c, font_sm)
+            det_label = f"{CLASSES[cls_id]} {conf:.0%}"
+            frame = put_text(frame, det_label, (x1, max(0, y1 - 36)), c, font_sm)
 
         # ── 상단 오버레이 ──────────────────────────────
         overlay = frame.copy()
-        cv2.rectangle(overlay, (0, 0), (frame.shape[1], 62), (0, 0, 0), -1)
+        cv2.rectangle(overlay, (0, 0), (frame.shape[1], 85), (0, 0, 0), -1)
         cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, frame)
-        frame = put_text(frame, msg, (12, 8), sc, font)
-        cv2.putText(frame, f"FPS:{fps:.1f}", (12, 55),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, COLOR_GRAY, 1)
+        frame = put_text(frame, status_label, (12, 8), sc, font)
+        if status_time:
+            if font is not None:
+                bb = font.getbbox(status_label)
+                label_w = bb[2] - bb[0]
+            else:
+                label_w = len(status_label) * 24
+            frame = put_text(frame, status_time, (12 + label_w + 20, 8), sc, font)
+        fps_text = f"FPS:{fps:.1f}"
+        (fps_tw, _), _ = cv2.getTextSize(fps_text, cv2.FONT_HERSHEY_SIMPLEX, 1, 1)
+        cv2.putText(frame, fps_text, (frame.shape[1] - fps_tw - 12, 42),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, COLOR_GRAY, 1)
 
         # ── 우하단 LED 원 ──────────────────────────────
         fh, fw = frame.shape[:2]
