@@ -6,7 +6,7 @@ YOLOv8n 기반 아기 자세 감지 — 정면 / 측면 / 후면
 종료: q 또는 ESC
 """
 
-import argparse, time, sys, threading
+import argparse, time, sys, threading, signal
 from collections import deque
 from datetime import datetime
 import cv2, numpy as np
@@ -106,7 +106,15 @@ def main():
     parser.add_argument("--source", default="0")
     parser.add_argument("--no-stream", action="store_true",
                         help="Flask 스트리밍 서버 비활성화")
+    parser.add_argument("--headless", action="store_true",
+                        help="디스플레이 없이 실행 (SSH 환경)")
     args = parser.parse_args()
+
+    # Linux에서 DISPLAY 환경변수 없으면 자동 헤드리스 (SSH 환경 자동 감지)
+    import os
+    headless = args.headless or (sys.platform != "darwin" and not os.environ.get("DISPLAY"))
+    if headless:
+        print("[헤드리스] 디스플레이 없이 실행 — 스트리밍으로 확인하세요")
 
     if not MODEL_PATH.exists():
         print("[오류] 모델 없음. 먼저 실행하세요:")
@@ -141,6 +149,13 @@ def main():
     if not cap.isOpened():
         print(f"[오류] 소스 열기 실패: {source}")
         sys.exit(1)
+
+    # 헤드리스 종료 플래그 (Ctrl+C)
+    _running = True
+    def _stop(*_):
+        nonlocal _running
+        _running = False
+    signal.signal(signal.SIGINT, _stop)
 
     back_start       = None   # 후면 감지 전용 타이머 (미감지와 분리)
     no_det_start     = None   # 미감지 전용 타이머
@@ -285,13 +300,18 @@ def main():
             _, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
             _set_frame(jpeg.tobytes())
 
-        cv2.imshow("Baby Safety Monitor v4", frame)
-        key = cv2.waitKey(1) & 0xFF
-        if key == ord("q") or key == 27:
-            break
+        if headless:
+            if not _running:
+                break
+        else:
+            cv2.imshow("Baby Safety Monitor v4", frame)
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("q") or key == 27:
+                break
 
     cap.release()
-    cv2.destroyAllWindows()
+    if not headless:
+        cv2.destroyAllWindows()
     print("[종료]")
 
 
