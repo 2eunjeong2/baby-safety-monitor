@@ -125,6 +125,6 @@ def index():
 
 if __name__ == "__main__":
     CAPTURE_DIR.mkdir(exist_ok=True)
-    print(f"[서버] http://0.0.0.0:5000")
+    print(f"[서버] http://0.0.0.0:8080")
     print(f"[캡처 폴더] {CAPTURE_DIR}")
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=8080, debug=False)

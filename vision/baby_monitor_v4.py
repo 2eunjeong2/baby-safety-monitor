@@ -132,6 +132,7 @@ def main():
     caution_captured = False  # CAUTION 5초 캡처 여부
     back_captured    = False  # DANGER(후면) 5초 캡처 여부
     nodet_captured   = False  # DANGER(미감지) 5초 캡처 여부
+    pending_capture  = None   # 오버레이 후 저장할 라벨 (None이면 저장 없음)
     frame_n          = 0
     prev_tick     = cv2.getTickCount()
     cached_det    = None   # (cls_id, conf, box) or None
@@ -194,8 +195,8 @@ def main():
                 if elapsed >= BACK_ALERT:
                     cached_status = (COLOR_RED, "DANGER !", f"No Det  {elapsed:.1f}s")
                     if not nodet_captured:
-                        save_capture(frame, "DANGER_NODET")
-                        nodet_captured = True
+                        pending_capture = "DANGER_NODET"
+                        nodet_captured  = True
                 else:
                     cached_status = (COLOR_GRAY, "감지 중...", f"{elapsed:.1f}s")
             else:
@@ -208,8 +209,8 @@ def main():
                     if elapsed >= BACK_ALERT:
                         cached_status = (COLOR_RED, "DANGER !", f"Back  {elapsed:.1f}s")
                         if not back_captured:
-                            save_capture(frame, "DANGER_BACK")
-                            back_captured = True
+                            pending_capture = "DANGER_BACK"
+                            back_captured   = True
                     else:
                         cached_status = (COLOR_RED, "DANGER", f"{elapsed:.1f}s / {BACK_ALERT:.0f}s")
                 else:
@@ -217,7 +218,7 @@ def main():
                     back_start = None
                     if smooth == 1:
                         if state_dur >= CAUTION_ALERT and not caution_captured:
-                            save_capture(frame, "CAUTION")
+                            pending_capture  = "CAUTION"
                             caution_captured = True
                         cached_status = (COLOR_YELLOW, "CAUTION", f"{state_dur:.1f}s")
                     else:
@@ -250,6 +251,11 @@ def main():
         (fps_tw, _), _ = cv2.getTextSize(fps_text, cv2.FONT_HERSHEY_SIMPLEX, 1, 1)
         cv2.putText(frame, fps_text, (frame.shape[1] - fps_tw - 12, 42),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, COLOR_GRAY, 1)
+
+        # ── 캡처 저장 (오버레이 포함된 프레임) ────────────
+        if pending_capture:
+            save_capture(frame, pending_capture)
+            pending_capture = None
 
         # ── 우하단 LED 원 ──────────────────────────────
         fh, fw = frame.shape[:2]
