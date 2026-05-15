@@ -8,6 +8,7 @@ YOLOv8n 기반 아기 자세 감지 — 정면 / 측면 / 후면
 
 import argparse, time, sys
 from collections import deque
+from datetime import datetime
 import cv2, numpy as np
 from pathlib import Path
 from ultralytics import YOLO
@@ -20,8 +21,10 @@ FONT_PATH  = "/System/Library/Fonts/AppleSDGothicNeo.ttc"
 CLASSES     = {0: "정면", 1: "측면", 2: "후면"}
 CONF_THRESH  = 0.40   # 최소 신뢰도
 CONF_SIDE    = 0.60   # 측면은 더 높은 신뢰도 요구 (정면 오탐 방지)
-BACK_ALERT   = 5.0    # 후면 N초 지속 → 위험
-FRAME_SKIP   = 2      # N프레임마다 1회 추론
+BACK_ALERT    = 5.0    # 후면 N초 지속 → 위험 캡처
+CAUTION_ALERT = 5.0    # 측면 N초 지속 → 경고 캡처
+CAPTURE_DIR   = ROOT / "captures"
+FRAME_SKIP    = 2      # N프레임마다 1회 추론
 SMOOTH_WIN   = 20     # 최근 N 추론 다수결 (≈1초 @ 30fps)
 
 COLOR_GREEN  = (50,  200,  50)
@@ -71,6 +74,16 @@ def best_detection(boxes):
     return cls_id, conf, box
 
 
+def save_capture(frame, label: str) -> Path:
+    """경고 발생 시 프레임을 captures/ 폴더에 저장."""
+    CAPTURE_DIR.mkdir(exist_ok=True)
+    ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = CAPTURE_DIR / f"{label}_{ts}.jpg"
+    cv2.imwrite(str(path), frame)
+    print(f"[캡처] {path.name}")
+    return path
+
+
 def smooth_class(history: deque):
     """최근 N 프레임 다수결. 후면은 25% 이상이고 최소 BACK_MIN_COUNT회면 우선."""
     counts = {}
@@ -111,26 +124,33 @@ def main():
         print(f"[오류] 소스 열기 실패: {source}")
         sys.exit(1)
 
-    back_start    = None   # 후면 감지 전용 타이머 (미감지와 분리)
-    no_det_start  = None   # 미감지 전용 타이머
-    was_back      = False  # 마지막 감지가 후면이었는지 (경고 알림용)
-    state_start   = None   # 현재 상태 누적 시간 타이머
-    prev_smooth   = -1     # 상태 변화 감지용
-    frame_n       = 0
+    back_start       = None   # 후면 감지 전용 타이머 (미감지와 분리)
+    no_det_start     = None   # 미감지 전용 타이머
+    was_back         = False  # 마지막 감지가 후면이었는지 (경고 알림용)
+    state_start      = None   # 현재 상태 누적 시간 타이머
+    prev_smooth      = -1     # 상태 변화 감지용
+    caution_captured = False  # CAUTION 5초 캡처 여부
+    back_captured    = False  # DANGER(후면) 5초 캡처 여부
+    nodet_captured   = False  # DANGER(미감지) 5초 캡처 여부
+    frame_n          = 0
     prev_tick     = cv2.getTickCount()
     cached_det    = None   # (cls_id, conf, box) or None
     cached_status = (COLOR_GRAY, "초기화 중...", "")
     cls_history   = deque(maxlen=SMOOTH_WIN)  # 시간적 평활화용
 
     def reset_state():
-        nonlocal back_start, no_det_start, was_back, state_start, prev_smooth, cached_det, cached_status
-        back_start   = None
-        no_det_start = None
-        was_back     = False
-        state_start  = None
-        prev_smooth  = -1
-        cached_det   = None
-        cached_status = (COLOR_GRAY, "초기화 중...", "")
+        nonlocal back_start, no_det_start, was_back, state_start, prev_smooth, \
+                 caution_captured, back_captured, nodet_captured, cached_det, cached_status
+        back_start       = None
+        no_det_start     = None
+        was_back         = False
+        state_start      = None
+        prev_smooth      = -1
+        caution_captured = False
+        back_captured    = False
+        nodet_captured   = False
+        cached_det       = None
+        cached_status    = (COLOR_GRAY, "초기화 중...", "")
         cls_history.clear()
 
     while True:
@@ -158,8 +178,11 @@ def main():
 
             now = time.time()
             if smooth != prev_smooth:
-                state_start = now
-                prev_smooth = smooth
+                state_start      = now
+                prev_smooth      = smooth
+                caution_captured = False
+                back_captured    = False
+                nodet_captured   = False
             state_dur = now - state_start
 
             if smooth is None:
@@ -170,6 +193,9 @@ def main():
                 back_start = None   # 후면 타이머는 감지가 없으면 리셋
                 if elapsed >= BACK_ALERT:
                     cached_status = (COLOR_RED, "DANGER !", f"No Det  {elapsed:.1f}s")
+                    if not nodet_captured:
+                        save_capture(frame, "DANGER_NODET")
+                        nodet_captured = True
                 else:
                     cached_status = (COLOR_GRAY, "감지 중...", f"{elapsed:.1f}s")
             else:
@@ -181,12 +207,18 @@ def main():
                     elapsed = now - back_start
                     if elapsed >= BACK_ALERT:
                         cached_status = (COLOR_RED, "DANGER !", f"Back  {elapsed:.1f}s")
+                        if not back_captured:
+                            save_capture(frame, "DANGER_BACK")
+                            back_captured = True
                     else:
                         cached_status = (COLOR_RED, "DANGER", f"{elapsed:.1f}s / {BACK_ALERT:.0f}s")
                 else:
                     was_back = False
                     back_start = None
                     if smooth == 1:
+                        if state_dur >= CAUTION_ALERT and not caution_captured:
+                            save_capture(frame, "CAUTION")
+                            caution_captured = True
                         cached_status = (COLOR_YELLOW, "CAUTION", f"{state_dur:.1f}s")
                     else:
                         cached_status = (COLOR_GREEN, "SAFE", f"{state_dur:.1f}s")
