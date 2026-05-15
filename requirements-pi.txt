@@ -1,9 +1,11 @@
 # Raspberry Pi 4 전용 requirements
 # 설치: pip install -r requirements-pi.txt
 #
-# 사전 준비 (Pi OS):
-#   sudo apt-get install -y python3-pip libopencv-dev
-#   sudo apt-get install -y fonts-nanum  # 한글 폰트
+# 주의: opencv-python(Qt 포함) 설치 금지 — Pi ARM CPU와 충돌 (Illegal instruction)
+#       반드시 opencv-python-headless 사용, imshow 대신 Flask 스트리밍(/live) 사용
+#
+# 실행: python3 vision/baby_monitor_v4.py --source 0 --headless
+# 접속: http://<Pi_IP>:8080/live
 #
 # torch는 pip wheel이 없으므로 Ultralytics가 자동으로 CPU 버전 설치함
 
