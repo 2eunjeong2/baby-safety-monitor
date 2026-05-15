@@ -13,6 +13,11 @@ import cv2, numpy as np
 from pathlib import Path
 from ultralytics import YOLO
 from PIL import ImageFont, ImageDraw, Image
+try:
+    import serial as _serial
+    _SERIAL_OK = True
+except ImportError:
+    _SERIAL_OK = False
 
 ROOT       = Path(__file__).resolve().parent.parent
 # Pi(ARM)에서는 ONNX+onnxruntime, Mac/PC에서는 .pt 사용
@@ -111,6 +116,8 @@ def main():
                         help="Flask 스트리밍 서버 비활성화")
     parser.add_argument("--headless", action="store_true",
                         help="디스플레이 없이 실행 (SSH 환경)")
+    parser.add_argument("--port", default="/dev/ttyUSB0",
+                        help="아두이노 시리얼 포트 (기본: /dev/ttyUSB0, 비활성화: none)")
     args = parser.parse_args()
 
     headless = args.headless
@@ -140,6 +147,26 @@ def main():
             print(f"[경고] 스트리밍 서버 시작 실패: {e}")
             _set_frame = None
 
+    # ── 아두이노 시리얼 연결 ──────────────────────────────
+    ser = None
+    if args.port.lower() != "none" and _SERIAL_OK:
+        try:
+            ser = _serial.Serial(args.port, 9600, timeout=1)
+            time.sleep(2)   # 아두이노 리셋 대기
+            print(f"[LED] 아두이노 연결: {args.port}")
+        except Exception as e:
+            print(f"[경고] 아두이노 연결 실패 (계속 실행): {e}")
+            ser = None
+    elif not _SERIAL_OK:
+        print("[경고] pyserial 미설치 — LED 제어 비활성화")
+
+    def send_led(cmd: str):
+        if ser and ser.is_open:
+            try:
+                ser.write(cmd.encode())
+            except Exception:
+                pass
+
     print("[로드] 모델 초기화...")
     model = YOLO(str(MODEL_PATH))
     font    = load_font(42)
@@ -167,6 +194,7 @@ def main():
     back_captured    = False  # DANGER(후면) 5초 캡처 여부
     nodet_captured   = False  # DANGER(미감지) 5초 캡처 여부
     pending_capture  = None   # 오버레이 후 저장할 라벨 (None이면 저장 없음)
+    cur_led          = None   # 현재 LED 상태 (중복 전송 방지)
     frame_n          = 0
     prev_tick     = cv2.getTickCount()
     cached_det    = None   # (cls_id, conf, box) or None
@@ -258,6 +286,22 @@ def main():
                     else:
                         cached_status = (COLOR_GREEN, "SAFE", f"{state_dur:.1f}s")
 
+            # ── LED 명령 전송 (상태 변화 시만) ───────────
+            if smooth == 0:
+                new_led = 'G'
+            elif smooth == 1:
+                new_led = 'Y'
+            elif smooth == 2:
+                new_led = 'R'
+            elif smooth is None and no_det_start and (now - no_det_start) >= BACK_ALERT:
+                new_led = 'R'
+            else:
+                new_led = None
+
+            if new_led and new_led != cur_led:
+                send_led(new_led)
+                cur_led = new_led
+
         sc, status_label, status_time = cached_status
 
         # ── 바운딩박스 ────────────────────────────────
@@ -313,6 +357,9 @@ def main():
     cap.release()
     if not headless:
         cv2.destroyAllWindows()
+    send_led('X')   # LED 전체 OFF
+    if ser:
+        ser.close()
     print("[종료]")
 
 
