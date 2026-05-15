@@ -110,9 +110,7 @@ def main():
                         help="디스플레이 없이 실행 (SSH 환경)")
     args = parser.parse_args()
 
-    # Linux에서 DISPLAY 환경변수 없으면 자동 헤드리스 (SSH 환경 자동 감지)
-    import os
-    headless = args.headless or (sys.platform != "darwin" and not os.environ.get("DISPLAY"))
+    headless = args.headless
     if headless:
         print("[헤드리스] 디스플레이 없이 실행 — 스트리밍으로 확인하세요")
 
