@@ -15,7 +15,10 @@ from ultralytics import YOLO
 from PIL import ImageFont, ImageDraw, Image
 
 ROOT       = Path(__file__).resolve().parent.parent
-MODEL_PATH = ROOT / "model" / "best.pt"
+# Pi(ARM)에서는 ONNX+onnxruntime, Mac/PC에서는 .pt 사용
+_onnx = ROOT / "model" / "best.onnx"
+_pt   = ROOT / "model" / "best.pt"
+MODEL_PATH = _onnx if _onnx.exists() else _pt
 FONT_PATH  = "/System/Library/Fonts/AppleSDGothicNeo.ttc"
 
 CLASSES     = {0: "정면", 1: "측면", 2: "후면"}

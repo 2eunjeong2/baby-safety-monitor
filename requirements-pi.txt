@@ -12,6 +12,7 @@
 ultralytics>=8.0.0
 flask>=2.3.0
 opencv-python-headless>=4.5.0
+onnxruntime>=1.16.0
 pillow>=9.0.0
 numpy>=1.23.0
 pyserial>=3.5
