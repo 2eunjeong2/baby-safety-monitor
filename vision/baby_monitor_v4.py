@@ -6,7 +6,7 @@ YOLOv8n 기반 아기 자세 감지 — 정면 / 측면 / 후면
 종료: q 또는 ESC
 """
 
-import argparse, time, sys
+import argparse, time, sys, threading
 from collections import deque
 from datetime import datetime
 import cv2, numpy as np
@@ -104,6 +104,8 @@ def smooth_class(history: deque):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", default="0")
+    parser.add_argument("--no-stream", action="store_true",
+                        help="Flask 스트리밍 서버 비활성화")
     args = parser.parse_args()
 
     if not MODEL_PATH.exists():
@@ -112,6 +114,22 @@ def main():
         sys.exit(1)
 
     source = int(args.source) if args.source.isdigit() else args.source
+
+    # ── Flask 스트리밍 서버 (백그라운드 스레드) ───────────────
+    _set_frame = None
+    if not args.no_stream:
+        try:
+            sys.path.insert(0, str(Path(__file__).parent))
+            from alert_server import app as _flask_app, set_frame as _set_frame
+            t = threading.Thread(
+                target=lambda: _flask_app.run(
+                    host="0.0.0.0", port=8080, debug=False, use_reloader=False),
+                daemon=True)
+            t.start()
+            print("[스트림] http://0.0.0.0:8080/live")
+        except Exception as e:
+            print(f"[경고] 스트리밍 서버 시작 실패: {e}")
+            _set_frame = None
 
     print("[로드] 모델 초기화...")
     model = YOLO(str(MODEL_PATH))
@@ -261,6 +279,11 @@ def main():
         fh, fw = frame.shape[:2]
         cv2.circle(frame, (fw - 24, fh - 24), 14, sc, -1)
         cv2.circle(frame, (fw - 24, fh - 24), 14, COLOR_WHITE, 1)
+
+        # ── 스트리밍 프레임 업데이트 ───────────────────────
+        if _set_frame is not None:
+            _, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
+            _set_frame(jpeg.tobytes())
 
         cv2.imshow("Baby Safety Monitor v4", frame)
         key = cv2.waitKey(1) & 0xFF
