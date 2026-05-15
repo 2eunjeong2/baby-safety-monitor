@@ -27,7 +27,7 @@ CONF_SIDE    = 0.60   # 측면은 더 높은 신뢰도 요구 (정면 오탐 방
 BACK_ALERT    = 5.0    # 후면 N초 지속 → 위험 캡처
 CAUTION_ALERT = 5.0    # 측면 N초 지속 → 경고 캡처
 CAPTURE_DIR   = ROOT / "captures"
-FRAME_SKIP    = 2      # N프레임마다 1회 추론
+FRAME_SKIP    = 4      # N프레임마다 1회 추론 (Pi 성능 고려)
 SMOOTH_WIN   = 20     # 최근 N 추론 다수결 (≈1초 @ 30fps)
 
 COLOR_GREEN  = (50,  200,  50)
