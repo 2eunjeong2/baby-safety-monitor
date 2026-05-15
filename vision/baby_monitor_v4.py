@@ -15,7 +15,7 @@ from ultralytics import YOLO
 from PIL import ImageFont, ImageDraw, Image
 
 ROOT       = Path(__file__).resolve().parent.parent
-MODEL_PATH = ROOT / "ai" / "runs" / "baby_monitor_v4" / "weights" / "best.pt"
+MODEL_PATH = ROOT / "model" / "best.pt"
 FONT_PATH  = "/System/Library/Fonts/AppleSDGothicNeo.ttc"
 
 CLASSES     = {0: "정면", 1: "측면", 2: "후면"}
